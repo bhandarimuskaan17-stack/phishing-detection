@@ -1,7 +1,8 @@
+
 import { useState } from "react";
 import "./App.css";
 
-const API_URL = "http://127.0.0.1:5000/check-url";
+const API_URL = "https://phishing-detection-3-c40k.onrender.com/check-url";
 
 function App() {
   const [url, setUrl] = useState("");
@@ -1147,3 +1148,4 @@ function App() {
 }
 
 export default App;
+
