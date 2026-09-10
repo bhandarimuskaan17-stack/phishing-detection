@@ -23,6 +23,3 @@ Thumbs.db
 
 # Large dataset
 data/*.csv
-
-# Trained ML models
-models/*.pkl
