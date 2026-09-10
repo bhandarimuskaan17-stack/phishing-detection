@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import "./App.css";
 
@@ -22,9 +21,16 @@ function App() {
 
       const audioContext = new AudioContext();
 
-      const playTone = (frequency, startTime, duration) => {
-        const oscillator = audioContext.createOscillator();
-        const gain = audioContext.createGain();
+      const playTone = (
+        frequency,
+        startTime,
+        duration
+      ) => {
+        const oscillator =
+          audioContext.createOscillator();
+
+        const gain =
+          audioContext.createGain();
 
         oscillator.type = "square";
 
@@ -52,13 +58,21 @@ function App() {
         gain.connect(audioContext.destination);
 
         oscillator.start(startTime);
-        oscillator.stop(startTime + duration);
+
+        oscillator.stop(
+          startTime + duration
+        );
       };
 
       const now = audioContext.currentTime;
 
       playTone(900, now, 0.18);
-      playTone(650, now + 0.23, 0.28);
+
+      playTone(
+        650,
+        now + 0.23,
+        0.28
+      );
 
       setTimeout(() => {
         audioContext.close();
@@ -72,11 +86,17 @@ function App() {
 
   // ================= URL SCANNER =================
 
-  const checkURL = async (urlToCheck = url) => {
-    const cleanURL = urlToCheck.trim();
+  const checkURL = async (
+    urlToCheck = url
+  ) => {
+    const cleanURL =
+      urlToCheck.trim();
 
     if (!cleanURL) {
-      setMessage("Please enter a URL first.");
+      setMessage(
+        "Please enter a URL first."
+      );
+
       return;
     }
 
@@ -85,17 +105,24 @@ function App() {
     setResult(null);
 
     try {
-      const response = await fetch(API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          url: cleanURL,
-        }),
-      });
+      const response = await fetch(
+        API_URL,
+        {
+          method: "POST",
 
-      const data = await response.json();
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+
+          body: JSON.stringify({
+            url: cleanURL,
+          }),
+        }
+      );
+
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -109,19 +136,28 @@ function App() {
       // Add scan to history
       const newScan = {
         url: cleanURL,
-        risk_level: data.risk_level,
-        threat_score: data.threat_score,
-        time: new Date().toLocaleTimeString(),
+
+        risk_level:
+          data.risk_level,
+
+        threat_score:
+          data.threat_score,
+
+        time:
+          new Date().toLocaleTimeString(),
       };
 
-      setHistory((previousHistory) => {
-        return [newScan, ...previousHistory].slice(
-          0,
-          5
-        );
-      });
+      setHistory(
+        (previousHistory) => {
+          return [
+            newScan,
+            ...previousHistory,
+          ].slice(0, 5);
+        }
+      );
 
-      // Play security warning for dangerous URLs
+      // Play security warning
+      // for dangerous URLs
       if (
         data.risk_level === "High" ||
         data.risk_level === "Critical"
@@ -129,7 +165,10 @@ function App() {
         playAlert();
       }
     } catch (error) {
-      console.error("Scan error:", error);
+      console.error(
+        "Scan error:",
+        error
+      );
 
       setMessage(
         "Could not connect to the backend. Make sure Flask is running on port 5000."
@@ -172,7 +211,9 @@ function App() {
     return "Likely Safe";
   };
 
-  const getIndicatorIcon = (status) => {
+  const getIndicatorIcon = (
+    status
+  ) => {
     if (status === "danger") {
       return "✕";
     }
@@ -195,9 +236,11 @@ function App() {
   // ================= QUICK TESTS =================
 
   const runGoogleTest = () => {
-    const testURL = "https://google.com";
+    const testURL =
+      "https://google.com";
 
     setUrl(testURL);
+
     checkURL(testURL);
   };
 
@@ -206,6 +249,7 @@ function App() {
       "https://www.youtube.com/";
 
     setUrl(testURL);
+
     checkURL(testURL);
   };
 
@@ -214,6 +258,7 @@ function App() {
       "https://www.amazon.in/";
 
     setUrl(testURL);
+
     checkURL(testURL);
   };
 
@@ -222,6 +267,7 @@ function App() {
       "http://192.168.1.1/login/verify-account";
 
     setUrl(testURL);
+
     checkURL(testURL);
   };
 
@@ -258,7 +304,9 @@ function App() {
 
           <span className="status-dot"></span>
 
-          Scanner Online
+          <span>
+            Scanner Online
+          </span>
 
         </div>
 
@@ -279,6 +327,7 @@ function App() {
           <h1>
             Don't click it.
             <br />
+
             <span>
               Scan it first.
             </span>
@@ -328,10 +377,14 @@ function App() {
               type="text"
               value={url}
               onChange={(event) => {
-                setUrl(event.target.value);
+                setUrl(
+                  event.target.value
+                );
               }}
               onKeyDown={(event) => {
-                if (event.key === "Enter") {
+                if (
+                  event.key === "Enter"
+                ) {
                   checkURL();
                 }
               }}
@@ -340,7 +393,9 @@ function App() {
 
             <button
               className="scan-button"
-              onClick={() => checkURL()}
+              onClick={() =>
+                checkURL()
+              }
               disabled={loading}
             >
               {loading
@@ -359,25 +414,33 @@ function App() {
             </span>
 
             <button
-              onClick={runGoogleTest}
+              onClick={
+                runGoogleTest
+              }
             >
               Google
             </button>
 
             <button
-              onClick={runYoutubeTest}
+              onClick={
+                runYoutubeTest
+              }
             >
               YouTube
             </button>
 
             <button
-              onClick={runAmazonTest}
+              onClick={
+                runAmazonTest
+              }
             >
               Amazon
             </button>
 
             <button
-              onClick={runSuspiciousTest}
+              onClick={
+                runSuspiciousTest
+              }
             >
               Suspicious URL
             </button>
@@ -392,7 +455,7 @@ function App() {
 
         </section>
 
-        {/* ================= SCANNING ANIMATION ================= */}
+        {/* ================= SCANNING ================= */}
 
         {loading && (
           <section className="scanning-card">
@@ -539,7 +602,8 @@ function App() {
                       </span>
 
                       <strong>
-                        {result.threat_score}/100
+                        {result.threat_score}
+                        /100
                       </strong>
 
                       <small>
@@ -597,10 +661,13 @@ function App() {
                 </div>
 
                 <span className="check-count">
+
                   {result.indicators
                     ? result.indicators.length
                     : 0}{" "}
+
                   checks
+
                 </span>
 
               </div>
@@ -609,7 +676,10 @@ function App() {
 
                 {result.indicators &&
                   result.indicators.map(
-                    (indicator, index) => (
+                    (
+                      indicator,
+                      index
+                    ) => (
 
                       <div
                         className={`indicator-card ${indicator.status}`}
@@ -617,9 +687,11 @@ function App() {
                       >
 
                         <div className="indicator-icon">
+
                           {getIndicatorIcon(
                             indicator.status
                           )}
+
                         </div>
 
                         <div>
@@ -667,7 +739,10 @@ function App() {
 
                 {result.reasons &&
                   result.reasons.map(
-                    (reason, index) => (
+                    (
+                      reason,
+                      index
+                    ) => (
 
                       <div
                         className="reason-item"
@@ -734,7 +809,8 @@ function App() {
 
                   <strong>
                     {result.features
-                      ?.domain_length ?? "-"}
+                      ?.domain_length ??
+                      "-"}
                   </strong>
 
                 </div>
@@ -747,7 +823,8 @@ function App() {
 
                   <strong>
                     {result.features
-                      ?.num_subdomains ?? "-"}
+                      ?.num_subdomains ??
+                      "-"}
                   </strong>
 
                 </div>
@@ -773,7 +850,8 @@ function App() {
 
                   <strong>
                     {result.features
-                      ?.num_hyphens ?? "-"}
+                      ?.num_hyphens ??
+                      "-"}
                   </strong>
 
                 </div>
@@ -957,6 +1035,7 @@ function App() {
         {/* ================= HISTORY ================= */}
 
         {history.length > 0 && (
+
           <section className="history-section">
 
             <div className="section-heading">
@@ -982,7 +1061,10 @@ function App() {
             <div className="history-list">
 
               {history.map(
-                (scan, index) => (
+                (
+                  scan,
+                  index
+                ) => (
 
                   <div
                     className="history-item"
@@ -1033,6 +1115,7 @@ function App() {
             </div>
 
           </section>
+
         )}
 
       </main>
@@ -1064,4 +1147,3 @@ function App() {
 }
 
 export default App;
-
