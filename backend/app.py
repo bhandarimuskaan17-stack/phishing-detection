@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import joblib
+import os
 
 from feature_extractor import extract_features
 from threat_engine import calculate_threat_score
@@ -14,7 +15,16 @@ CORS(app)
 # Load URL-text ML model
 # --------------------------------------------------
 
-model = joblib.load("../models/url_text_model.pkl")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+MODEL_PATH = os.path.join(
+    BASE_DIR,
+    "..",
+    "models",
+    "url_text_model.pkl"
+)
+
+model = joblib.load(MODEL_PATH)
 
 
 # --------------------------------------------------
