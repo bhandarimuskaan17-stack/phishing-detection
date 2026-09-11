@@ -1,7 +1,8 @@
+
 import { useState } from "react";
 import "./App.css";
 
-// Render backend URL
+// Production Flask backend URL
 const API_URL =
   "https://phishing-detection-3-c40k.onrender.com/check-url";
 
@@ -1104,3 +1105,4 @@ function App() {
 }
 
 export default App;
+
