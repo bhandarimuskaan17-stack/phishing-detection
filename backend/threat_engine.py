@@ -24,7 +24,7 @@ def get_base_domain(hostname):
 
 def calculate_threat_score(url, features, ml_probability):
 
-    # ML contributes to the score, but does not control it.
+    # ML is one signal, not the final verdict
     score = ml_probability * 100 * 0.35
 
     reasons = []
@@ -33,12 +33,11 @@ def calculate_threat_score(url, features, ml_probability):
     hostname = features.get("hostname", "")
     base_domain = get_base_domain(hostname)
 
-    # ---------------------------------------------------------
+    # --------------------------------------------------
     # TRUSTED DOMAIN
-    # ---------------------------------------------------------
+    # --------------------------------------------------
 
     if base_domain in TRUSTED_DOMAINS:
-
         score -= 30
 
         indicators.append({
@@ -47,9 +46,9 @@ def calculate_threat_score(url, features, ml_probability):
             "message": "Domain matches a commonly trusted website."
         })
 
-    # ---------------------------------------------------------
+    # --------------------------------------------------
     # HTTPS
-    # ---------------------------------------------------------
+    # --------------------------------------------------
 
     if features["has_https"] == 1:
 
@@ -73,9 +72,9 @@ def calculate_threat_score(url, features, ml_probability):
             "The website does not use HTTPS."
         )
 
-    # ---------------------------------------------------------
+    # --------------------------------------------------
     # IP ADDRESS
-    # ---------------------------------------------------------
+    # --------------------------------------------------
 
     if features["has_ip"] == 1:
 
@@ -99,15 +98,14 @@ def calculate_threat_score(url, features, ml_probability):
             "message": "URL uses a normal domain."
         })
 
-    # ---------------------------------------------------------
+    # --------------------------------------------------
     # SUSPICIOUS KEYWORDS
-    # ---------------------------------------------------------
+    # --------------------------------------------------
 
     keyword_count = features["suspicious_word_count"]
 
     if keyword_count > 0:
 
-        # Stronger penalty for multiple phishing-related words.
         keyword_score = min(keyword_count * 12, 48)
 
         score += keyword_score
@@ -130,9 +128,9 @@ def calculate_threat_score(url, features, ml_probability):
             "message": "No common phishing keywords detected."
         })
 
-    # ---------------------------------------------------------
+    # --------------------------------------------------
     # SUBDOMAINS
-    # ---------------------------------------------------------
+    # --------------------------------------------------
 
     if features["num_subdomains"] > 2:
 
@@ -156,9 +154,9 @@ def calculate_threat_score(url, features, ml_probability):
             "message": "Subdomain structure looks normal."
         })
 
-    # ---------------------------------------------------------
+    # --------------------------------------------------
     # PUNYCODE
-    # ---------------------------------------------------------
+    # --------------------------------------------------
 
     if features["has_punycode"] == 1:
 
@@ -171,13 +169,13 @@ def calculate_threat_score(url, features, ml_probability):
         })
 
         reasons.append(
-            "The domain contains punycode, which can sometimes "
-            "be used for deceptive domains."
+            "The domain contains punycode, which can sometimes be used "
+            "for deceptive domains."
         )
 
-    # ---------------------------------------------------------
+    # --------------------------------------------------
     # SUSPICIOUS TLD
-    # ---------------------------------------------------------
+    # --------------------------------------------------
 
     if features["has_suspicious_tld"] == 1:
 
@@ -194,9 +192,9 @@ def calculate_threat_score(url, features, ml_probability):
             "with suspicious websites."
         )
 
-    # ---------------------------------------------------------
+    # --------------------------------------------------
     # URL ENCODING
-    # ---------------------------------------------------------
+    # --------------------------------------------------
 
     if features["num_encoded_chars"] > 2:
 
@@ -212,9 +210,9 @@ def calculate_threat_score(url, features, ml_probability):
             "The URL contains multiple encoded characters."
         )
 
-    # ---------------------------------------------------------
+    # --------------------------------------------------
     # @ SYMBOL
-    # ---------------------------------------------------------
+    # --------------------------------------------------
 
     if features["has_at"] == 1:
 
@@ -231,9 +229,9 @@ def calculate_threat_score(url, features, ml_probability):
             "to disguise the actual destination."
         )
 
-    # ---------------------------------------------------------
+    # --------------------------------------------------
     # URL LENGTH
-    # ---------------------------------------------------------
+    # --------------------------------------------------
 
     if features["url_length"] > 100:
 
@@ -267,9 +265,9 @@ def calculate_threat_score(url, features, ml_probability):
             "message": "URL length looks normal."
         })
 
-    # ---------------------------------------------------------
+    # --------------------------------------------------
     # HYPHENS
-    # ---------------------------------------------------------
+    # --------------------------------------------------
 
     if features["num_hyphens"] > 3:
 
@@ -285,13 +283,15 @@ def calculate_threat_score(url, features, ml_probability):
             "The URL contains an unusually high number of hyphens."
         )
 
-    # ---------------------------------------------------------
+    # --------------------------------------------------
     # URL ENTROPY
-    # ---------------------------------------------------------
+    # --------------------------------------------------
+    # Entropy is now treated as a weaker signal.
+    # Random-looking IDs can occur on legitimate websites.
 
-    if features["url_entropy"] > 4.5:
+    if features["url_entropy"] > 4.8:
 
-        score += 10
+        score += 5
 
         indicators.append({
             "name": "URL Entropy",
@@ -303,9 +303,9 @@ def calculate_threat_score(url, features, ml_probability):
             "The URL contains unusually random character patterns."
         )
 
-    # ---------------------------------------------------------
+    # --------------------------------------------------
     # SPECIAL CHARACTERS
-    # ---------------------------------------------------------
+    # --------------------------------------------------
 
     if features["num_special_chars"] > 4:
 
@@ -321,9 +321,9 @@ def calculate_threat_score(url, features, ml_probability):
             "The URL contains many special characters."
         )
 
-    # ---------------------------------------------------------
+    # --------------------------------------------------
     # COUNT SUSPICIOUS STRUCTURAL SIGNALS
-    # ---------------------------------------------------------
+    # --------------------------------------------------
 
     suspicious_structure_count = 0
 
@@ -354,31 +354,33 @@ def calculate_threat_score(url, features, ml_probability):
     if features["num_hyphens"] > 3:
         suspicious_structure_count += 1
 
-    if features["url_entropy"] > 4.5:
+    # Updated entropy threshold
+    if features["url_entropy"] > 4.8:
         suspicious_structure_count += 1
 
     if features["num_special_chars"] > 4:
         suspicious_structure_count += 1
 
-    # ---------------------------------------------------------
-    # PROTECT AGAINST ML FALSE POSITIVES
-    # ---------------------------------------------------------
+    # --------------------------------------------------
+    # PROTECT CLEAN URLS FROM ML FALSE POSITIVES
+    # --------------------------------------------------
 
     if suspicious_structure_count == 0:
 
         score = min(score, 30)
 
-    # Trusted domains remain low risk unless they contain
-    # strong suspicious structural indicators.
+    # Trusted domains with no suspicious structure
+    # should remain very low risk.
+
     if base_domain in TRUSTED_DOMAINS and suspicious_structure_count == 0:
 
         score = min(score, 20)
 
-    # ---------------------------------------------------------
-    # STRONG PHISHING SIGNAL OVERRIDE
-    # ---------------------------------------------------------
-    # Multiple suspicious keywords combined with insecure
-    # connection should not be classified as "Likely Safe".
+    # --------------------------------------------------
+    # STRONG PHISHING COMBINATIONS
+    # --------------------------------------------------
+    # Multiple phishing keywords + missing HTTPS
+    # should produce a high-risk result.
 
     if keyword_count >= 4 and features["has_https"] == 0:
 
@@ -392,18 +394,18 @@ def calculate_threat_score(url, features, ml_probability):
 
         score = max(score, 65)
 
-    # ---------------------------------------------------------
-    # FINAL SCORE
-    # ---------------------------------------------------------
+    # --------------------------------------------------
+    # KEEP SCORE BETWEEN 0 AND 100
+    # --------------------------------------------------
 
     score = max(
         0,
         min(100, round(score))
     )
 
-    # ---------------------------------------------------------
+    # --------------------------------------------------
     # RISK LEVEL
-    # ---------------------------------------------------------
+    # --------------------------------------------------
 
     if score >= 85:
 
@@ -421,17 +423,17 @@ def calculate_threat_score(url, features, ml_probability):
 
         risk_level = "Low"
 
-    # ---------------------------------------------------------
-    # REASONS
-    # ---------------------------------------------------------
+    # --------------------------------------------------
+    # FALLBACK EXPLANATION
+    # --------------------------------------------------
 
     if not reasons:
 
         if ml_probability >= 0.70:
 
             reasons.append(
-                "The ML model detected unusual patterns, "
-                "but no major suspicious URL indicators were found."
+                "The ML model detected unusual patterns, but no major "
+                "suspicious URL indicators were found."
             )
 
         else:
@@ -439,6 +441,10 @@ def calculate_threat_score(url, features, ml_probability):
             reasons.append(
                 "No major suspicious URL patterns were detected."
             )
+
+    # --------------------------------------------------
+    # RETURN RESULT
+    # --------------------------------------------------
 
     return {
         "threat_score": score,
