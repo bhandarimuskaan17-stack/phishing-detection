@@ -24,7 +24,7 @@ def get_base_domain(hostname):
 
 def calculate_threat_score(url, features, ml_probability):
 
-    # ML is one signal, not the final decision.
+    # ML contributes to the score, but does not control it.
     score = ml_probability * 100 * 0.35
 
     reasons = []
@@ -61,7 +61,7 @@ def calculate_threat_score(url, features, ml_probability):
 
     else:
 
-        score += 8
+        score += 10
 
         indicators.append({
             "name": "HTTPS",
@@ -103,24 +103,19 @@ def calculate_threat_score(url, features, ml_probability):
     # SUSPICIOUS KEYWORDS
     # ---------------------------------------------------------
 
-    if features["suspicious_word_count"] > 0:
+    keyword_count = features["suspicious_word_count"]
 
-        # Multiple phishing-related words should significantly
-        # increase the threat score.
-        keyword_score = min(
-            features["suspicious_word_count"] * 10,
-            40
-        )
+    if keyword_count > 0:
+
+        # Stronger penalty for multiple phishing-related words.
+        keyword_score = min(keyword_count * 12, 48)
 
         score += keyword_score
 
         indicators.append({
             "name": "Suspicious Keywords",
             "status": "warning",
-            "message": (
-                f"{features['suspicious_word_count']} "
-                "suspicious keyword(s) detected."
-            )
+            "message": f"{keyword_count} suspicious keyword(s) detected."
         })
 
         reasons.append(
@@ -327,7 +322,7 @@ def calculate_threat_score(url, features, ml_probability):
         )
 
     # ---------------------------------------------------------
-    # SUSPICIOUS STRUCTURE COUNT
+    # COUNT SUSPICIOUS STRUCTURAL SIGNALS
     # ---------------------------------------------------------
 
     suspicious_structure_count = 0
@@ -335,7 +330,7 @@ def calculate_threat_score(url, features, ml_probability):
     if features["has_ip"] == 1:
         suspicious_structure_count += 1
 
-    if features["suspicious_word_count"] > 0:
+    if keyword_count > 0:
         suspicious_structure_count += 1
 
     if features["num_subdomains"] > 2:
@@ -366,19 +361,36 @@ def calculate_threat_score(url, features, ml_probability):
         suspicious_structure_count += 1
 
     # ---------------------------------------------------------
-    # PREVENT ML FALSE POSITIVES
+    # PROTECT AGAINST ML FALSE POSITIVES
     # ---------------------------------------------------------
 
-    # If the ML model is suspicious but the URL has no
-    # suspicious structural indicators, don't allow the
-    # ML model alone to produce a Critical result.
-
     if suspicious_structure_count == 0:
+
         score = min(score, 30)
 
-    # Trusted domains receive an additional safety cap.
-    if base_domain in TRUSTED_DOMAINS:
+    # Trusted domains remain low risk unless they contain
+    # strong suspicious structural indicators.
+    if base_domain in TRUSTED_DOMAINS and suspicious_structure_count == 0:
+
         score = min(score, 20)
+
+    # ---------------------------------------------------------
+    # STRONG PHISHING SIGNAL OVERRIDE
+    # ---------------------------------------------------------
+    # Multiple suspicious keywords combined with insecure
+    # connection should not be classified as "Likely Safe".
+
+    if keyword_count >= 4 and features["has_https"] == 0:
+
+        score = max(score, 85)
+
+    elif keyword_count >= 4:
+
+        score = max(score, 70)
+
+    elif keyword_count >= 2 and features["has_https"] == 0:
+
+        score = max(score, 65)
 
     # ---------------------------------------------------------
     # FINAL SCORE
