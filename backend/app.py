@@ -1,8 +1,8 @@
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import joblib
 import os
+import pandas as pd
 
 from feature_extractor import (
     extract_features,
@@ -27,11 +27,16 @@ BASE_DIR = os.path.dirname(
     os.path.abspath(__file__)
 )
 
+# IMPORTANT: this now points to the model that train_model.py actually
+# produces (a RandomForestClassifier trained on structured numeric
+# features), NOT a raw-text model. If you have a separate script that
+# produces "url_text_model.pkl", that model is a different, unvalidated
+# pipeline and should not be used until it's audited.
 MODEL_PATH = os.path.join(
     BASE_DIR,
     "..",
     "models",
-    "url_text_model.pkl"
+    "phishing_model.pkl"
 )
 
 
@@ -179,9 +184,28 @@ def check_url():
 
         if model is not None:
 
-            probabilities = model.predict_proba(
-                [url]
-            )[0]
+            # The model was trained on a structured feature table
+            # (see train_model.py), NOT on raw URL strings. It must
+            # receive a DataFrame with the same columns, in the same
+            # order, as it saw during training.
+
+            feature_df = pd.DataFrame([features])
+
+            if hasattr(model, "feature_names_in_"):
+
+                expected_cols = list(model.feature_names_in_)
+
+                missing = set(expected_cols) - set(feature_df.columns)
+
+                if missing:
+                    raise ValueError(
+                        "extract_features() is missing columns the "
+                        f"model expects: {missing}"
+                    )
+
+                feature_df = feature_df[expected_cols]
+
+            probabilities = model.predict_proba(feature_df)[0]
 
 
             # Dataset convention:
@@ -359,4 +383,3 @@ if __name__ == "__main__":
 
         debug=True
     )
-

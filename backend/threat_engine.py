@@ -456,13 +456,27 @@ def calculate_threat_score(url, features, ml_probability):
     # 8. EXPLANATION
     # --------------------------------------------------
 
+    # This block only changes WORDING so the UI honestly reflects
+    # what the hybrid system actually did. It does not change the
+    # score in any way.
+
     if not reasons:
 
-        if ml_probability >= 0.70:
+        if base_domain in TRUSTED_DOMAINS and ml_probability >= 0.5:
 
             reasons.append(
-                "The ML model detected unusual patterns, but no major "
-                "suspicious URL indicators were found."
+                "The ML model produced a high phishing signal for this "
+                "URL, but it matches a well-known trusted domain and "
+                "shows no major structural phishing indicators, so "
+                "PhishGuard treats it as low risk."
+            )
+
+        elif ml_probability >= 0.70:
+
+            reasons.append(
+                "The ML model flagged unusual patterns in this URL, "
+                "but no major suspicious structural indicators were "
+                "found."
             )
 
         else:
