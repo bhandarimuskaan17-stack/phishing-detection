@@ -1,13 +1,37 @@
+
 from urllib.parse import urlparse
 import ipaddress
 import math
 from collections import Counter
 
 
+def normalize_url(url):
+    """
+    Make user-entered URLs easier to analyze.
+
+    Examples:
+        google.com
+        http://google.com
+        https://google.com
+    """
+
+    url = url.strip()
+
+    if not url:
+        return ""
+
+    # If the user did not specify a scheme,
+    # assume HTTPS for analysis.
+    if not url.lower().startswith(("http://", "https://")):
+        url = "https://" + url
+
+    return url
+
+
 def calculate_entropy(text):
     """
-    Calculate the Shannon entropy of a string.
-    Higher values can indicate more random or obfuscated text.
+    Calculate Shannon entropy.
+    Higher values can indicate more random/obfuscated text.
     """
 
     if not text:
@@ -19,7 +43,9 @@ def calculate_entropy(text):
     entropy = 0.0
 
     for count in counts.values():
+
         probability = count / length
+
         entropy -= probability * math.log2(probability)
 
     return entropy
@@ -30,28 +56,34 @@ def extract_features(url):
     Extract security-related features from a URL.
     """
 
-    # Parse the URL
+    # Normalize URL first
+    url = normalize_url(url)
+
     parsed_url = urlparse(url)
 
     hostname = parsed_url.hostname or ""
-    path = parsed_url.path
-    query = parsed_url.query
+    path = parsed_url.path or ""
+    query = parsed_url.query or ""
 
     url_lower = url.lower()
     hostname_lower = hostname.lower()
 
     # --------------------------------------------------
-    # Check whether hostname is an IP address
+    # IP ADDRESS
     # --------------------------------------------------
 
     try:
+
         ipaddress.ip_address(hostname)
+
         has_ip = 1
+
     except (ValueError, TypeError):
+
         has_ip = 0
 
     # --------------------------------------------------
-    # Suspicious words
+    # SUSPICIOUS WORDS
     # --------------------------------------------------
 
     suspicious_words = [
@@ -80,7 +112,7 @@ def extract_features(url):
     )
 
     # --------------------------------------------------
-    # Suspicious TLDs
+    # SUSPICIOUS TLD
     # --------------------------------------------------
 
     suspicious_tlds = [
@@ -104,19 +136,19 @@ def extract_features(url):
     )
 
     # --------------------------------------------------
-    # URL encoding / obfuscation
+    # ENCODING
     # --------------------------------------------------
 
     num_encoded_chars = url_lower.count("%")
 
     # --------------------------------------------------
-    # Double slash inside path
+    # DOUBLE SLASH IN PATH
     # --------------------------------------------------
 
     has_double_slash = int("//" in path)
 
     # --------------------------------------------------
-    # Number of subdomains
+    # SUBDOMAINS
     # --------------------------------------------------
 
     num_subdomains = max(
@@ -125,23 +157,18 @@ def extract_features(url):
     )
 
     # --------------------------------------------------
-    # URL entropy
+    # ENTROPY
     # --------------------------------------------------
 
     url_entropy = calculate_entropy(url)
 
     # --------------------------------------------------
-    # Feature dictionary
+    # FEATURES
     # --------------------------------------------------
 
     features = {
 
-        # Hostname
         "hostname": hostname,
-
-        # --------------------------------------------------
-        # Original 20 ML features
-        # --------------------------------------------------
 
         "url_length": len(url),
 
@@ -152,7 +179,7 @@ def extract_features(url):
         "query_length": len(query),
 
         "has_https": int(
-            parsed_url.scheme == "https"
+            parsed_url.scheme.lower() == "https"
         ),
 
         "has_ip": has_ip,
@@ -205,37 +232,35 @@ def extract_features(url):
             "xn--" in hostname_lower
         ),
 
-        "suspicious_word_count": suspicious_word_count,
+        "suspicious_word_count":
+            suspicious_word_count,
 
-        # --------------------------------------------------
-        # New security features
-        # --------------------------------------------------
+        "has_suspicious_tld":
+            has_suspicious_tld,
 
-        "has_suspicious_tld": has_suspicious_tld,
+        "num_encoded_chars":
+            num_encoded_chars,
 
-        "num_encoded_chars": num_encoded_chars,
+        "has_double_slash":
+            has_double_slash,
 
-        "has_double_slash": has_double_slash,
+        "url_entropy":
+            round(url_entropy, 4),
 
-        "url_entropy": round(
-            url_entropy,
-            4
-        ),
+        "has_fragment":
+            int(bool(parsed_url.fragment)),
 
-        "has_fragment": int(
-            bool(parsed_url.fragment)
-        ),
+        "num_colons":
+            url.count(":"),
 
-        "num_colons": url.count(":"),
+        "num_semicolons":
+            url.count(";"),
 
-        "num_semicolons": url.count(";"),
+        "num_underscores":
+            url.count("_"),
 
-        "num_underscores": url.count("_"),
-
-        "num_parentheses": (
-            url.count("(")
-            + url.count(")")
-        )
+        "num_parentheses":
+            url.count("(") + url.count(")")
     }
 
     return features

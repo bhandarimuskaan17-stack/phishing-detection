@@ -2,7 +2,9 @@
 import { useState } from "react";
 import "./App.css";
 
-const API_URL = "https://phishing-detection-3-c40k.onrender.com/check-url";
+// Render backend URL
+const API_URL =
+  "https://phishing-detection-3-c40k.onrender.com/check-url";
 
 function App() {
   const [url, setUrl] = useState("");
@@ -22,16 +24,9 @@ function App() {
 
       const audioContext = new AudioContext();
 
-      const playTone = (
-        frequency,
-        startTime,
-        duration
-      ) => {
-        const oscillator =
-          audioContext.createOscillator();
-
-        const gain =
-          audioContext.createGain();
+      const playTone = (frequency, startTime, duration) => {
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
 
         oscillator.type = "square";
 
@@ -40,10 +35,7 @@ function App() {
           startTime
         );
 
-        gain.gain.setValueAtTime(
-          0.001,
-          startTime
-        );
+        gain.gain.setValueAtTime(0.001, startTime);
 
         gain.gain.exponentialRampToValueAtTime(
           0.18,
@@ -59,46 +51,46 @@ function App() {
         gain.connect(audioContext.destination);
 
         oscillator.start(startTime);
-
-        oscillator.stop(
-          startTime + duration
-        );
+        oscillator.stop(startTime + duration);
       };
 
       const now = audioContext.currentTime;
 
       playTone(900, now, 0.18);
-
-      playTone(
-        650,
-        now + 0.23,
-        0.28
-      );
+      playTone(650, now + 0.23, 0.28);
 
       setTimeout(() => {
         audioContext.close();
       }, 700);
     } catch (error) {
-      console.log(
-        "Security alert sound unavailable"
-      );
+      console.log("Security alert sound unavailable");
     }
   };
 
   // ================= URL SCANNER =================
 
-  const checkURL = async (
-    urlToCheck = url
-  ) => {
-    const cleanURL =
-      urlToCheck.trim();
+  const checkURL = async (urlToCheck = url) => {
+    let cleanURL = urlToCheck.trim();
 
     if (!cleanURL) {
-      setMessage(
-        "Please enter a URL first."
-      );
-
+      setMessage("Please enter a URL first.");
       return;
+    }
+
+    /*
+      Automatically add HTTPS if the user enters:
+
+      google.com
+      www.google.com
+
+      This makes the scanner easier to use.
+    */
+    if (
+      !cleanURL.startsWith("http://") &&
+      !cleanURL.startsWith("https://")
+    ) {
+      cleanURL = "https://" + cleanURL;
+      setUrl(cleanURL);
     }
 
     setLoading(true);
@@ -106,29 +98,23 @@ function App() {
     setResult(null);
 
     try {
-      const response = await fetch(
-        API_URL,
-        {
-          method: "POST",
+      const response = await fetch(API_URL, {
+        method: "POST",
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-          body: JSON.stringify({
-            url: cleanURL,
-          }),
-        }
-      );
+        body: JSON.stringify({
+          url: cleanURL,
+        }),
+      });
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.error ||
-            "Unable to analyze this URL."
+          data.error || "Unable to analyze this URL."
         );
       }
 
@@ -137,28 +123,16 @@ function App() {
       // Add scan to history
       const newScan = {
         url: cleanURL,
-
-        risk_level:
-          data.risk_level,
-
-        threat_score:
-          data.threat_score,
-
-        time:
-          new Date().toLocaleTimeString(),
+        risk_level: data.risk_level,
+        threat_score: data.threat_score,
+        time: new Date().toLocaleTimeString(),
       };
 
-      setHistory(
-        (previousHistory) => {
-          return [
-            newScan,
-            ...previousHistory,
-          ].slice(0, 5);
-        }
-      );
+      setHistory((previousHistory) => {
+        return [newScan, ...previousHistory].slice(0, 5);
+      });
 
-      // Play security warning
-      // for dangerous URLs
+      // Play warning only for genuinely high-risk results
       if (
         data.risk_level === "High" ||
         data.risk_level === "Critical"
@@ -166,13 +140,11 @@ function App() {
         playAlert();
       }
     } catch (error) {
-      console.error(
-        "Scan error:",
-        error
-      );
+      console.error("Scan error:", error);
 
       setMessage(
-        "Could not connect to the backend. Make sure Flask is running on port 5000."
+        error.message ||
+          "Could not connect to the backend. Please try again."
       );
     } finally {
       setLoading(false);
@@ -182,10 +154,7 @@ function App() {
   // ================= RISK HELPERS =================
 
   const getRiskClass = (risk) => {
-    if (
-      risk === "Critical" ||
-      risk === "High"
-    ) {
+    if (risk === "Critical" || risk === "High") {
       return "danger";
     }
 
@@ -212,9 +181,7 @@ function App() {
     return "Likely Safe";
   };
 
-  const getIndicatorIcon = (
-    status
-  ) => {
+  const getIndicatorIcon = (status) => {
     if (status === "danger") {
       return "✕";
     }
@@ -237,29 +204,20 @@ function App() {
   // ================= QUICK TESTS =================
 
   const runGoogleTest = () => {
-    const testURL =
-      "https://google.com";
-
+    const testURL = "https://google.com";
     setUrl(testURL);
-
     checkURL(testURL);
   };
 
   const runYoutubeTest = () => {
-    const testURL =
-      "https://www.youtube.com/";
-
+    const testURL = "https://www.youtube.com/";
     setUrl(testURL);
-
     checkURL(testURL);
   };
 
   const runAmazonTest = () => {
-    const testURL =
-      "https://www.amazon.in/";
-
+    const testURL = "https://www.amazon.in/";
     setUrl(testURL);
-
     checkURL(testURL);
   };
 
@@ -268,7 +226,6 @@ function App() {
       "http://192.168.1.1/login/verify-account";
 
     setUrl(testURL);
-
     checkURL(testURL);
   };
 
@@ -378,14 +335,10 @@ function App() {
               type="text"
               value={url}
               onChange={(event) => {
-                setUrl(
-                  event.target.value
-                );
+                setUrl(event.target.value);
               }}
               onKeyDown={(event) => {
-                if (
-                  event.key === "Enter"
-                ) {
+                if (event.key === "Enter") {
                   checkURL();
                 }
               }}
@@ -394,9 +347,7 @@ function App() {
 
             <button
               className="scan-button"
-              onClick={() =>
-                checkURL()
-              }
+              onClick={() => checkURL()}
               disabled={loading}
             >
               {loading
@@ -414,35 +365,19 @@ function App() {
               Quick tests:
             </span>
 
-            <button
-              onClick={
-                runGoogleTest
-              }
-            >
+            <button onClick={runGoogleTest}>
               Google
             </button>
 
-            <button
-              onClick={
-                runYoutubeTest
-              }
-            >
+            <button onClick={runYoutubeTest}>
               YouTube
             </button>
 
-            <button
-              onClick={
-                runAmazonTest
-              }
-            >
+            <button onClick={runAmazonTest}>
               Amazon
             </button>
 
-            <button
-              onClick={
-                runSuspiciousTest
-              }
-            >
+            <button onClick={runSuspiciousTest}>
               Suspicious URL
             </button>
 
@@ -523,7 +458,7 @@ function App() {
                   </h2>
 
                   <p className="scanned-url">
-                    {url}
+                    {result.url}
                   </p>
 
                 </div>
@@ -584,8 +519,7 @@ function App() {
 
                       <strong>
                         {(
-                          result.phishing_probability *
-                          100
+                          result.phishing_probability * 100
                         ).toFixed(1)}
                         %
                       </strong>
@@ -615,12 +549,17 @@ function App() {
 
                   </div>
 
+                  {/* IMPORTANT:
+                      Use backend-generated reasons instead
+                      of inventing a generic explanation.
+                  */}
+
                   <p className="explanation">
 
-                    {result.phishing_probability >=
-                    0.5
-                      ? "The ML model detected phishing-like patterns in this URL. The final risk score also considers trusted-domain checks and other security indicators."
-                      : "The ML model detected relatively few phishing-like patterns. The final risk score also considers URL structure and security indicators."}
+                    {result.reasons &&
+                    result.reasons.length > 0
+                      ? result.reasons[0]
+                      : "The URL was analyzed using machine-learning and security indicators."}
 
                   </p>
 
@@ -632,8 +571,8 @@ function App() {
 
                     PhishGuard combines the
                     machine-learning signal with
-                    security heuristics before
-                    producing the final risk level.
+                    URL security heuristics to
+                    produce the final risk score.
 
                   </div>
 
@@ -677,10 +616,7 @@ function App() {
 
                 {result.indicators &&
                   result.indicators.map(
-                    (
-                      indicator,
-                      index
-                    ) => (
+                    (indicator, index) => (
 
                       <div
                         className={`indicator-card ${indicator.status}`}
@@ -740,10 +676,7 @@ function App() {
 
                 {result.reasons &&
                   result.reasons.map(
-                    (
-                      reason,
-                      index
-                    ) => (
+                    (reason, index) => (
 
                       <div
                         className="reason-item"
@@ -766,6 +699,42 @@ function App() {
               </div>
 
             </section>
+
+            {/* ================= RECOMMENDATION ================= */}
+
+            {result.recommendation && (
+              <section className="reasons-section">
+
+                <div className="section-heading">
+
+                  <div>
+
+                    <span className="section-label">
+                      SECURITY RECOMMENDATION
+                    </span>
+
+                    <h2>
+                      What should you do?
+                    </h2>
+
+                  </div>
+
+                </div>
+
+                <div className="reason-item">
+
+                  <span>
+                    !
+                  </span>
+
+                  <p>
+                    {result.recommendation}
+                  </p>
+
+                </div>
+
+              </section>
+            )}
 
             {/* ================= FORENSICS ================= */}
 
@@ -796,8 +765,7 @@ function App() {
                   </span>
 
                   <strong>
-                    {result.features?.url_length ??
-                      "-"}
+                    {result.features?.url_length ?? "-"}
                   </strong>
 
                 </div>
@@ -809,9 +777,7 @@ function App() {
                   </span>
 
                   <strong>
-                    {result.features
-                      ?.domain_length ??
-                      "-"}
+                    {result.features?.domain_length ?? "-"}
                   </strong>
 
                 </div>
@@ -823,9 +789,7 @@ function App() {
                   </span>
 
                   <strong>
-                    {result.features
-                      ?.num_subdomains ??
-                      "-"}
+                    {result.features?.num_subdomains ?? "-"}
                   </strong>
 
                 </div>
@@ -837,8 +801,7 @@ function App() {
                   </span>
 
                   <strong>
-                    {result.features?.num_digits ??
-                      "-"}
+                    {result.features?.num_digits ?? "-"}
                   </strong>
 
                 </div>
@@ -850,9 +813,7 @@ function App() {
                   </span>
 
                   <strong>
-                    {result.features
-                      ?.num_hyphens ??
-                      "-"}
+                    {result.features?.num_hyphens ?? "-"}
                   </strong>
 
                 </div>
@@ -864,8 +825,7 @@ function App() {
                   </span>
 
                   <strong>
-                    {result.features?.url_entropy ??
-                      "-"}
+                    {result.features?.url_entropy ?? "-"}
                   </strong>
 
                 </div>
@@ -1062,10 +1022,7 @@ function App() {
             <div className="history-list">
 
               {history.map(
-                (
-                  scan,
-                  index
-                ) => (
+                (scan, index) => (
 
                   <div
                     className="history-item"
