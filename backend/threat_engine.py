@@ -14,6 +14,9 @@ TRUSTED_DOMAINS = {
 
 
 def get_base_domain(hostname):
+    if not hostname:
+        return ""
+
     parts = hostname.lower().split(".")
 
     if len(parts) >= 2:
@@ -23,474 +26,417 @@ def get_base_domain(hostname):
 
 
 def calculate_threat_score(url, features, ml_probability):
+    """
+    Hybrid phishing threat scoring.
 
-    # --------------------------------------------------
-    # 1. ML MODEL SCORE
-    # --------------------------------------------------
+    The final score combines:
+    - Machine-learning prediction
+    - Interpretable URL security indicators
 
-    # ML probability is directly converted to a 0-100 score.
-    # There is NO arbitrary 0.35 multiplier anymore.
+    Weak indicators have limited influence.
+    Strong combinations can still produce Critical risk.
+    """
+
+    # =========================================================
+    # 1. MACHINE LEARNING SCORE
+    # =========================================================
 
     ml_score = round(ml_probability * 100)
 
-    score = ml_score
+    # ML has strong influence, but does NOT completely determine
+    # the final score.
+    score = round(ml_score * 0.65)
 
-    reasons = []
-    indicators = []
+    # =========================================================
+    # 2. FEATURE VALUES
+    # =========================================================
 
     hostname = features.get("hostname", "")
     base_domain = get_base_domain(hostname)
 
-    # --------------------------------------------------
-    # 2. SECURITY EVIDENCE
-    # --------------------------------------------------
+    is_trusted_domain = base_domain in TRUSTED_DOMAINS
 
-    security_adjustment = 0
+    https = features.get("has_https", 0)
+    has_ip = features.get("has_ip", 0)
 
-    strong_threat_signals = 0
+    keyword_count = features.get("suspicious_word_count", 0)
+    subdomains = features.get("num_subdomains", 0)
+
+    punycode = features.get("has_punycode", 0)
+    suspicious_tld = features.get("has_suspicious_tld", 0)
+
+    encoded_count = features.get("num_encoded_chars", 0)
+
+    has_at = features.get("has_at", 0)
+
+    url_length = features.get("url_length", 0)
+    hyphens = features.get("num_hyphens", 0)
+    special_chars = features.get("num_special_chars", 0)
+
+    entropy = features.get("url_entropy", 0)
+
+    # =========================================================
+    # 3. STRONG DOMAIN-LEVEL THREATS
+    # =========================================================
+
+    domain_level_threats = 0
+
+    if has_ip:
+        domain_level_threats += 1
+
+    if punycode:
+        domain_level_threats += 1
+
+    if suspicious_tld:
+        domain_level_threats += 1
+
+    if has_at:
+        domain_level_threats += 1
+
+    # =========================================================
+    # 4. SECURITY HEURISTICS
+    # =========================================================
+
+    adjustment = 0
     warning_signals = 0
 
-    # --------------------------------------------------
-    # TRUSTED DOMAIN
-    # --------------------------------------------------
+    # ---------------------------------------------------------
+    # HTTPS
+    # ---------------------------------------------------------
 
-    if base_domain in TRUSTED_DOMAINS:
+    if not https:
+        adjustment += 6
+        warning_signals += 1
 
+    # ---------------------------------------------------------
+    # IP ADDRESS
+    # ---------------------------------------------------------
+
+    if has_ip:
+        adjustment += 18
+
+    # ---------------------------------------------------------
+    # SUSPICIOUS KEYWORDS
+    # ---------------------------------------------------------
+
+    if keyword_count > 0:
+        keyword_points = min(keyword_count * 4, 16)
+
+        adjustment += keyword_points
+        warning_signals += 1
+
+    # ---------------------------------------------------------
+    # TOO MANY SUBDOMAINS
+    # ---------------------------------------------------------
+
+    if subdomains > 2:
+        adjustment += 5
+        warning_signals += 1
+
+    # ---------------------------------------------------------
+    # PUNYCODE
+    # ---------------------------------------------------------
+
+    if punycode:
+        adjustment += 12
+
+    # ---------------------------------------------------------
+    # SUSPICIOUS TLD
+    # ---------------------------------------------------------
+
+    if suspicious_tld:
+        adjustment += 7
+        warning_signals += 1
+
+    # ---------------------------------------------------------
+    # ENCODED CHARACTERS
+    # ---------------------------------------------------------
+
+    # Encoding alone is NOT considered a major threat.
+    if encoded_count > 2:
+        adjustment += 3
+        warning_signals += 1
+
+    # ---------------------------------------------------------
+    # @ SYMBOL
+    # ---------------------------------------------------------
+
+    if has_at:
+        adjustment += 15
+
+    # ---------------------------------------------------------
+    # URL LENGTH
+    # ---------------------------------------------------------
+
+    # Long URLs receive only a small penalty.
+    if url_length > 150:
+        adjustment += 4
+        warning_signals += 1
+
+    elif url_length > 100:
+        adjustment += 2
+        warning_signals += 1
+
+    # ---------------------------------------------------------
+    # MANY HYPHENS
+    # ---------------------------------------------------------
+
+    if hyphens > 3:
+        adjustment += 4
+        warning_signals += 1
+
+    # ---------------------------------------------------------
+    # HIGH ENTROPY
+    # ---------------------------------------------------------
+
+    if entropy > 4.8:
+        adjustment += 3
+        warning_signals += 1
+
+    # ---------------------------------------------------------
+    # MANY SPECIAL CHARACTERS
+    # ---------------------------------------------------------
+
+    if special_chars > 4:
+        adjustment += 3
+        warning_signals += 1
+
+    # =========================================================
+    # 5. LIMIT HEURISTIC CONTRIBUTION
+    # =========================================================
+
+    # Weak indicators should never create Critical risk by
+    # themselves.
+
+    if domain_level_threats >= 2:
+        adjustment = min(adjustment, 25)
+
+    elif domain_level_threats == 1:
+        adjustment = min(adjustment, 20)
+
+    elif warning_signals >= 3:
+        adjustment = min(adjustment, 12)
+
+    else:
+        adjustment = min(adjustment, 8)
+
+    score += adjustment
+
+    # =========================================================
+    # 6. TRUSTED DOMAIN HANDLING
+    # =========================================================
+
+    if is_trusted_domain and domain_level_threats == 0:
+
+        # Normal trusted website
+        if keyword_count == 0 and warning_signals <= 1:
+            score = min(score, 30)
+
+        # Trusted domain but suspicious path
+        elif keyword_count > 0:
+            score = min(score, 55)
+            score = max(score, 40)
+
+        # Other minor warnings
+        else:
+            score = min(score, 40)
+
+    # Trusted domain with a strong anomaly
+    elif is_trusted_domain and domain_level_threats > 0:
+
+        score = min(score, 70)
+
+    # =========================================================
+    # 7. STRONG PHISHING COMBINATIONS
+    # =========================================================
+
+    # These rules can override the normal score because they
+    # represent combinations of genuinely strong indicators.
+
+    if not is_trusted_domain or domain_level_threats > 0:
+
+        # Many phishing keywords + no HTTPS
+        if keyword_count >= 4 and not https:
+            score = max(score, 85)
+
+        # Many keywords + strong domain-level signal
+        elif keyword_count >= 4 and domain_level_threats >= 1:
+            score = max(score, 80)
+
+        # Multiple keywords + no HTTPS
+        elif keyword_count >= 2 and not https:
+            score = max(score, 65)
+
+        # IP + suspicious keywords
+        if has_ip and keyword_count >= 1:
+            score = max(score, 85)
+
+        # @ + suspicious keywords
+        if has_at and keyword_count >= 1:
+            score = max(score, 85)
+
+        # Punycode + suspicious keywords
+        if punycode and keyword_count >= 1:
+            score = max(score, 80)
+
+    # =========================================================
+    # 8. KEEP SCORE BETWEEN 0 AND 100
+    # =========================================================
+
+    score = max(0, min(100, score))
+
+    # =========================================================
+    # 9. RISK LEVEL
+    # =========================================================
+
+    if score >= 85:
+        risk_level = "Critical"
+
+    elif score >= 65:
+        risk_level = "High"
+
+    elif score >= 35:
+        risk_level = "Medium"
+
+    else:
+        risk_level = "Low"
+
+    # =========================================================
+    # 10. REASONS
+    # =========================================================
+
+    reasons = []
+
+    if not https:
+        reasons.append(
+            "The URL does not use HTTPS."
+        )
+
+    if has_ip:
+        reasons.append(
+            "The URL uses an IP address instead of a normal domain."
+        )
+
+    if keyword_count > 0:
+        reasons.append(
+            "The URL contains words commonly associated with phishing."
+        )
+
+    if subdomains > 2:
+        reasons.append(
+            "The URL contains an unusually large number of subdomains."
+        )
+
+    if punycode:
+        reasons.append(
+            "The domain uses punycode, which can sometimes be used for lookalike domains."
+        )
+
+    if suspicious_tld:
+        reasons.append(
+            "The domain uses a potentially suspicious top-level domain."
+        )
+
+    if encoded_count > 2:
+        reasons.append(
+            "The URL contains several encoded characters."
+        )
+
+    if has_at:
+        reasons.append(
+            "The URL contains an @ symbol, which can hide the actual destination."
+        )
+
+    if url_length > 150:
+        reasons.append(
+            "The URL is unusually long."
+        )
+
+    elif url_length > 100:
+        reasons.append(
+            "The URL is somewhat long."
+        )
+
+    # ML explanation if there aren't obvious indicators
+    if not reasons:
+
+        if ml_probability >= 0.70:
+            reasons.append(
+                "The machine-learning model detected unusual URL patterns."
+            )
+
+        else:
+            reasons.append(
+                "No major suspicious URL indicators were detected."
+            )
+
+    # =========================================================
+    # 11. DETECTION INDICATORS
+    # =========================================================
+
+    indicators = []
+
+    # Trusted domain
+    if is_trusted_domain:
         indicators.append({
             "name": "Trusted Domain",
             "status": "pass",
             "message": "Domain matches a commonly trusted website."
         })
 
-    # --------------------------------------------------
+    else:
+        indicators.append({
+            "name": "Domain",
+            "status": "warning" if domain_level_threats > 0 else "pass",
+            "message": "Domain does not match the trusted-domain list."
+        })
+
     # HTTPS
-    # --------------------------------------------------
-
-    if features["has_https"] == 1:
-
-        indicators.append({
-            "name": "HTTPS",
-            "status": "pass",
-            "message": "Connection uses HTTPS."
-        })
-
-    else:
-
-        security_adjustment += 8
-        warning_signals += 1
-
-        indicators.append({
-            "name": "HTTPS",
-            "status": "warning",
-            "message": "URL does not use HTTPS."
-        })
-
-        reasons.append(
-            "The website does not use HTTPS."
+    indicators.append({
+        "name": "HTTPS",
+        "status": "pass" if https else "warning",
+        "message": (
+            "Connection uses HTTPS."
+            if https
+            else "Connection does not use HTTPS."
         )
+    })
 
-    # --------------------------------------------------
-    # IP ADDRESS
-    # --------------------------------------------------
-
-    if features["has_ip"] == 1:
-
-        security_adjustment += 20
-        strong_threat_signals += 1
-
-        indicators.append({
-            "name": "IP Address",
-            "status": "danger",
-            "message": "URL uses an IP address instead of a domain."
-        })
-
-        reasons.append(
-            "The URL uses an IP address instead of a normal domain."
+    # IP
+    indicators.append({
+        "name": "IP Address",
+        "status": "warning" if has_ip else "pass",
+        "message": (
+            "URL uses an IP address."
+            if has_ip
+            else "URL uses a normal domain."
         )
+    })
 
-    else:
-
-        indicators.append({
-            "name": "IP Address",
-            "status": "pass",
-            "message": "URL uses a normal domain."
-        })
-
-    # --------------------------------------------------
-    # SUSPICIOUS KEYWORDS
-    # --------------------------------------------------
-
-    keyword_count = features["suspicious_word_count"]
-
-    if keyword_count > 0:
-
-        keyword_adjustment = min(keyword_count * 6, 24)
-
-        security_adjustment += keyword_adjustment
-
-        if keyword_count >= 3:
-            strong_threat_signals += 1
-        else:
-            warning_signals += 1
-
-        indicators.append({
-            "name": "Suspicious Keywords",
-            "status": "warning",
-            "message": f"{keyword_count} suspicious keyword(s) detected."
-        })
-
-        reasons.append(
-            "The URL contains words commonly associated with phishing."
+    # Suspicious keywords
+    indicators.append({
+        "name": "Suspicious Keywords",
+        "status": "warning" if keyword_count > 0 else "pass",
+        "message": (
+            f"{keyword_count} suspicious keyword(s) detected."
+            if keyword_count > 0
+            else "No suspicious keywords detected."
         )
-
-    else:
-
-        indicators.append({
-            "name": "Suspicious Keywords",
-            "status": "pass",
-            "message": "No common phishing keywords detected."
-        })
-
-    # --------------------------------------------------
-    # SUBDOMAINS
-    # --------------------------------------------------
-
-    if features["num_subdomains"] > 2:
-
-        security_adjustment += 8
-        warning_signals += 1
-
-        indicators.append({
-            "name": "Subdomains",
-            "status": "warning",
-            "message": "URL contains multiple subdomains."
-        })
-
-        reasons.append(
-            "The URL contains an unusually large number of subdomains."
-        )
-
-    else:
-
-        indicators.append({
-            "name": "Subdomains",
-            "status": "pass",
-            "message": "Subdomain structure looks normal."
-        })
-
-    # --------------------------------------------------
-    # PUNYCODE
-    # --------------------------------------------------
-
-    if features["has_punycode"] == 1:
-
-        security_adjustment += 15
-        strong_threat_signals += 1
-
-        indicators.append({
-            "name": "Punycode",
-            "status": "danger",
-            "message": "Internationalized domain encoding detected."
-        })
-
-        reasons.append(
-            "The domain contains punycode, which can sometimes be "
-            "used for deceptive domains."
-        )
-
-    # --------------------------------------------------
-    # SUSPICIOUS TLD
-    # --------------------------------------------------
-
-    if features["has_suspicious_tld"] == 1:
-
-        security_adjustment += 8
-        warning_signals += 1
-
-        indicators.append({
-            "name": "Domain Extension",
-            "status": "warning",
-            "message": "The domain uses a less commonly trusted TLD."
-        })
-
-        reasons.append(
-            "The domain uses a TLD that can sometimes be associated "
-            "with suspicious websites."
-        )
-
-    # --------------------------------------------------
-    # URL ENCODING
-    # --------------------------------------------------
-
-    if features["num_encoded_chars"] > 2:
-
-        security_adjustment += 7
-        warning_signals += 1
-
-        indicators.append({
-            "name": "URL Encoding",
-            "status": "warning",
-            "message": "Multiple encoded characters detected."
-        })
-
-        reasons.append(
-            "The URL contains multiple encoded characters."
-        )
-
-    # --------------------------------------------------
-    # @ SYMBOL
-    # --------------------------------------------------
-
-    if features["has_at"] == 1:
-
-        security_adjustment += 15
-        strong_threat_signals += 1
-
-        indicators.append({
-            "name": "@ Symbol",
-            "status": "danger",
-            "message": "The URL contains an @ symbol."
-        })
-
-        reasons.append(
-            "The URL contains an @ symbol, which can be used "
-            "to disguise the actual destination."
-        )
-
-    # --------------------------------------------------
-    # URL LENGTH
-    # --------------------------------------------------
-
-    if features["url_length"] > 100:
-
-        security_adjustment += 8
-        warning_signals += 1
-
-        indicators.append({
-            "name": "URL Length",
-            "status": "warning",
-            "message": "URL is unusually long."
-        })
-
-        reasons.append(
-            "The URL is unusually long."
-        )
-
-    elif features["url_length"] > 75:
-
-        security_adjustment += 4
-        warning_signals += 1
-
-        indicators.append({
-            "name": "URL Length",
-            "status": "warning",
-            "message": "URL is longer than normal."
-        })
-
-    else:
-
-        indicators.append({
-            "name": "URL Length",
-            "status": "pass",
-            "message": "URL length looks normal."
-        })
-
-    # --------------------------------------------------
-    # HYPHENS
-    # --------------------------------------------------
-
-    if features["num_hyphens"] > 3:
-
-        security_adjustment += 6
-        warning_signals += 1
-
-        indicators.append({
-            "name": "Hyphens",
-            "status": "warning",
-            "message": "URL contains many hyphens."
-        })
-
-        reasons.append(
-            "The URL contains an unusually high number of hyphens."
-        )
-
-    # --------------------------------------------------
-    # URL ENTROPY
-    # --------------------------------------------------
-
-    # Entropy is deliberately a weak signal because legitimate
-    # websites often contain random IDs, tokens and identifiers.
-
-    if features["url_entropy"] > 4.8:
-
-        security_adjustment += 4
-        warning_signals += 1
-
-        indicators.append({
-            "name": "URL Entropy",
-            "status": "warning",
-            "message": "URL contains highly irregular character patterns."
-        })
-
-        reasons.append(
-            "The URL contains unusually random character patterns."
-        )
-
-    # --------------------------------------------------
-    # SPECIAL CHARACTERS
-    # --------------------------------------------------
-
-    if features["num_special_chars"] > 4:
-
-        security_adjustment += 5
-        warning_signals += 1
-
-        indicators.append({
-            "name": "Special Characters",
-            "status": "warning",
-            "message": "Many special characters detected."
-        })
-
-        reasons.append(
-            "The URL contains many special characters."
-        )
-
-    # --------------------------------------------------
-    # 3. COMBINE ML + SECURITY EVIDENCE
-    # --------------------------------------------------
-
-    # Security evidence is an adjustment to the ML score.
-    #
-    # We cap the adjustment so that a few URL features cannot
-    # completely overpower the ML prediction.
-
-    if strong_threat_signals >= 2:
-
-        score += min(security_adjustment, 25)
-
-    elif strong_threat_signals == 1:
-
-        score += min(security_adjustment, 15)
-
-    elif warning_signals >= 2:
-
-        score += min(security_adjustment, 10)
-
-    else:
-
-        score += min(security_adjustment, 5)
-
-    # --------------------------------------------------
-    # 4. PROTECT CLEARLY CLEAN TRUSTED DOMAINS
-    # --------------------------------------------------
-
-    if (
-        base_domain in TRUSTED_DOMAINS
-        and strong_threat_signals == 0
-        and warning_signals <= 1
-    ):
-
-        # A trusted domain with essentially clean URL structure
-        # should not become Critical because of an ML false positive.
-
-        score = min(score, 30)
-
-    # --------------------------------------------------
-    # 5. STRONG PHISHING COMBINATION
-    # --------------------------------------------------
-
-    # Several strong phishing indicators should guarantee
-    # a high-risk result.
-
-    if (
-        keyword_count >= 4
-        and features["has_https"] == 0
-    ):
-
-        score = max(score, 85)
-
-    elif (
-        keyword_count >= 4
-        and strong_threat_signals >= 1
-    ):
-
-        score = max(score, 80)
-
-    elif (
-        keyword_count >= 2
-        and features["has_https"] == 0
-    ):
-
-        score = max(score, 65)
-
-    # --------------------------------------------------
-    # 6. LIMIT SCORE
-    # --------------------------------------------------
-
-    score = max(
-        0,
-        min(100, round(score))
-    )
-
-    # --------------------------------------------------
-    # 7. RISK LEVEL
-    # --------------------------------------------------
-
-    if score >= 85:
-
-        risk_level = "Critical"
-
-    elif score >= 65:
-
-        risk_level = "High"
-
-    elif score >= 35:
-
-        risk_level = "Medium"
-
-    else:
-
-        risk_level = "Low"
-
-    # --------------------------------------------------
-    # 8. EXPLANATION
-    # --------------------------------------------------
-
-    # This block only changes WORDING so the UI honestly reflects
-    # what the hybrid system actually did. It does not change the
-    # score in any way.
-
-    if not reasons:
-
-        if base_domain in TRUSTED_DOMAINS and ml_probability >= 0.5:
-
-            reasons.append(
-                "The ML model produced a high phishing signal for this "
-                "URL, but it matches a well-known trusted domain and "
-                "shows no major structural phishing indicators, so "
-                "PhishGuard treats it as low risk."
-            )
-
-        elif ml_probability >= 0.70:
-
-            reasons.append(
-                "The ML model flagged unusual patterns in this URL, "
-                "but no major suspicious structural indicators were "
-                "found."
-            )
-
-        else:
-
-            reasons.append(
-                "No major suspicious URL patterns were detected."
-            )
-
-    # --------------------------------------------------
-    # 9. RETURN RESULT
-    # --------------------------------------------------
+    })
+
+    # URL length
+    indicators.append({
+        "name": "URL Length",
+        "status": "warning" if url_length > 150 else "pass",
+        "message": f"URL contains {url_length} characters."
+    })
+
+    # =========================================================
+    # 12. FINAL RESPONSE
+    # =========================================================
 
     return {
-        "threat_score": score,
+        "threat_score": int(score),
         "risk_level": risk_level,
         "reasons": reasons,
         "indicators": indicators
