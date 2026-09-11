@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import "./App.css";
 
@@ -511,29 +510,32 @@ function App() {
 
                   <div className="assessment-boxes">
 
+                    {/* ML ANALYSIS */}
+
                     <div className="info-box">
 
                       <span>
-                        ML SIGNAL
+                        ML ANALYSIS
                       </span>
 
                       <strong>
-                        {(
-                          result.phishing_probability * 100
-                        ).toFixed(1)}
-                        %
+                        {result.threat_score >= 65
+                          ? "Threat detected"
+                          : "No major threat"}
                       </strong>
 
                       <small>
-                        phishing probability
+                        based on the overall security assessment
                       </small>
 
                     </div>
 
+                    {/* FINAL VERDICT */}
+
                     <div className="info-box">
 
                       <span>
-                        FINAL RISK
+                        PHISHGUARD VERDICT
                       </span>
 
                       <strong>
@@ -542,17 +544,14 @@ function App() {
                       </strong>
 
                       <small>
-                        combined threat score
+                        final security assessment
                       </small>
 
                     </div>
 
                   </div>
 
-                  {/* IMPORTANT:
-                      Use backend-generated reasons instead
-                      of inventing a generic explanation.
-                  */}
+                  {/* BACKEND-GENERATED EXPLANATION */}
 
                   <p className="explanation">
 
@@ -569,10 +568,10 @@ function App() {
                       How the score works:
                     </strong>{" "}
 
-                    PhishGuard combines the
-                    machine-learning signal with
-                    URL security heuristics to
-                    produce the final risk score.
+                    PhishGuard combines machine-learning
+                    patterns with URL security checks,
+                    domain context, and threat indicators
+                    to produce the final risk assessment.
 
                   </div>
 
@@ -1105,4 +1104,3 @@ function App() {
 }
 
 export default App;
-
