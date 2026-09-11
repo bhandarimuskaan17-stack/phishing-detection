@@ -24,8 +24,7 @@ def get_base_domain(hostname):
 
 def calculate_threat_score(url, features, ml_probability):
 
-    # ML is only ONE signal.
-    # We do not let it dominate the entire decision.
+    # ML is one signal, not the final decision.
     score = ml_probability * 100 * 0.35
 
     reasons = []
@@ -39,6 +38,7 @@ def calculate_threat_score(url, features, ml_probability):
     # ---------------------------------------------------------
 
     if base_domain in TRUSTED_DOMAINS:
+
         score -= 30
 
         indicators.append({
@@ -105,9 +105,11 @@ def calculate_threat_score(url, features, ml_probability):
 
     if features["suspicious_word_count"] > 0:
 
+        # Multiple phishing-related words should significantly
+        # increase the threat score.
         keyword_score = min(
-            features["suspicious_word_count"] * 7,
-            21
+            features["suspicious_word_count"] * 10,
+            40
         )
 
         score += keyword_score
@@ -325,10 +327,8 @@ def calculate_threat_score(url, features, ml_probability):
         )
 
     # ---------------------------------------------------------
-    # IMPORTANT SAFETY CHECK
+    # SUSPICIOUS STRUCTURE COUNT
     # ---------------------------------------------------------
-    # If the URL has no meaningful suspicious structural indicators,
-    # don't allow the ML model alone to make it Critical.
 
     suspicious_structure_count = 0
 
@@ -365,8 +365,14 @@ def calculate_threat_score(url, features, ml_probability):
     if features["num_special_chars"] > 4:
         suspicious_structure_count += 1
 
-    # If ML is suspicious but URL structure looks normal,
-    # cap the score so we don't incorrectly call it Critical.
+    # ---------------------------------------------------------
+    # PREVENT ML FALSE POSITIVES
+    # ---------------------------------------------------------
+
+    # If the ML model is suspicious but the URL has no
+    # suspicious structural indicators, don't allow the
+    # ML model alone to produce a Critical result.
+
     if suspicious_structure_count == 0:
         score = min(score, 30)
 
